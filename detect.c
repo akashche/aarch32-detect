@@ -32,7 +32,7 @@ int create_test_instrs(int** instrs_out, char*** instr_names_out) {
     // test list
     instrs[i] = 0xe1a00000; instr_names[i++] = "mov, r0, r0";
     instrs[i] = 0xffffffff; instr_names[i++] = "invalid";
-    instrs[i] = 0xe19d0f9f; instr_names[i++] = "ldrex r0, [sp]";
+    instrs[i] = 0xe1900f9f; instr_names[i++] = "ldrex r0, [r0]";
     
     // check and return
     if (i != len) {
@@ -44,6 +44,7 @@ int create_test_instrs(int** instrs_out, char*** instr_names_out) {
 }
 
 void handle_signal(int signal) {
+    __sync_synchronize();
     // rewrite illegal instruction
     global_mem_ptr_int[0] = INSTR_NOP;
     // return 1 to caller
@@ -51,12 +52,13 @@ void handle_signal(int signal) {
     __sync_synchronize();
 }
 
-void detect(int len, int* instrs, char** instr_names, int (*mem_ptr_fun)()) {
+void detect(int len, int* instrs, char** instr_names, int (*mem_ptr_fun)(void*)) {
+    volatile int tmp = 0;
     for (int i = 0; i < len; i++) {
         global_mem_ptr_int[0] = instrs[i];
         global_mem_ptr_int[1] = INSTR_RET0;
         __sync_synchronize();
-        printf("%d %x %s\n", mem_ptr_fun(), instrs[i], instr_names[i]);
+        printf("%d %x %s\n", mem_ptr_fun((void*) &tmp), instrs[i], instr_names[i]);
     }
 }
 
@@ -80,7 +82,7 @@ int main() {
     mem_ptr_int[3] = INSTR_POP;
     mem_ptr_int[4] = INSTR_BXLR;
     int (*mem_ptr_fun)();
-    mem_ptr_fun = (int (*)()) mem_ptr;
+    mem_ptr_fun = (int (*)(void*)) mem_ptr;
 
     // signal handler
     struct sigaction sa;
