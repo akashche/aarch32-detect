@@ -22,6 +22,26 @@
 
 int* global_mem_ptr_int;
 
+int create_test_instrs(int** instrs_out, char*** instr_names_out) {
+    // update len accordingly on test list change
+    int len = 2;
+    int* instrs = malloc(len * sizeof(int));
+    char** instr_names = malloc(len * sizeof(char*));
+    int i = 0;
+
+    // test list
+    instrs[i] = 0xe1a00000; instr_names[i++] = "NOP";
+    instrs[i] = 0xffffffff; instr_names[i++] = "INVALID";
+    
+    // check and return
+    if (i != len) {
+        return -1;
+    }
+    *instrs_out = instrs;
+    *instr_names_out = instr_names;
+    return i;
+}
+
 void handle_signal(int signal) {
     // rewrite illegal instruction
     global_mem_ptr_int[0] = INSTR_NOP;
@@ -30,11 +50,11 @@ void handle_signal(int signal) {
     __sync_synchronize();
 }
 
-void detect(int (*mem_ptr_fun)()) {
-    global_mem_ptr_int[0] = INSTR_NOP;
-    printf("sigill: [%d]\n", mem_ptr_fun());
-    global_mem_ptr_int[0] = 0xffffffff;
-    printf("sigill: [%d]\n", mem_ptr_fun());
+void detect(int len, int* instrs, char** instr_names, int (*mem_ptr_fun)()) {
+    for (int i = 0; i < len; i++) {
+        global_mem_ptr_int[0] = instrs[i];
+        printf("%d: %s\n", mem_ptr_fun(), instr_names[i]);
+    }
 }
 
 int main() {
@@ -69,11 +89,20 @@ int main() {
         perror("sigaction error");
         return errno;
     }
+    
+    // test instrs
+    int* instrs;
+    char** instr_names;
+    int tests_num = create_test_instrs(&instrs, &instr_names);
+    if (-1 == tests_num) {
+        puts("create_test_instrs error");
+        return -1;
+    }
 
     // run detection
     global_mem_ptr_int = mem_ptr_int + 1;
     __sync_synchronize();
-    detect(mem_ptr_fun);
+    detect(tests_num, instrs, instr_names, mem_ptr_fun);
 
     // cleanup
     sa.sa_handler = SIG_DFL;
@@ -82,6 +111,8 @@ int main() {
         perror("sigaction cleanup error");
     }
     free(mem_ptr);
+    free(instrs);
+    free(instr_names);
 
     return 0;
 }
