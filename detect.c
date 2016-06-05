@@ -1,98 +1,87 @@
 
 #include <errno.h>
-#include <sys/signalfd.h>
 #include <signal.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
+#include <sys/mman.h>
 
-/**
- *   0: no sigill
- *   1: sigill
- *  -1: read error
- *  -2: different signal
- *  -3: more than one signal
- */
-int check_sigill(int sfd, struct signalfd_siginfo* sfdsi_ptr,
-        int check_next) {
-    size_t len = sizeof(struct signalfd_siginfo);
-    ssize_t retlen = read(sfd, sfdsi_ptr, len);
-    if (-1 == retlen && EAGAIN == errno) {
-        // no sigill
-        return 0;
-    } else if (len == retlen) {
-        if (SIGILL == sfdsi_ptr->ssi_signo) {
-            if (check_next > 0) {
-                // check for next signal
-                int next_signal = check_sigill(sfd, sfdsi_ptr, --check_next);
-                if (0 == next_signal) {
-                    // sigill
-                    return 1;
-                } else if (-1 == next_signal) {
-                    // read error
-                    return -1;
-                } else {
-                    // more than one signal
-                    return -3;
-                }
-            } else {
-                return 1;
-            }
-        } else {
-            // diferent signal
-            return -2;
-        }
-    } else {
-        // read error
-        return -1; 
-    }
+#define ALIGNED_MEMSIZE 16
+// push {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+#define INSTR_PUSH 0xe92d4ff0
+// mov r0, r0
+#define INSTR_NOP 0xe1a00000
+// mov r0, #0
+#define INSTR_RET0 0xe3a00000
+// mov r0, #1
+#define INSTR_RET1 0xe3a00001
+// pop {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+#define INSTR_POP 0xe8bd4ff0
+// bxlr
+#define INSTR_BXLR 0xe12fff1e
+
+int* global_mem_ptr_int;
+
+void handle_signal(int signal) {
+    // rewrite illegal instruction
+    global_mem_ptr_int[0] = INSTR_NOP;
+    // return 1 to caller
+    global_mem_ptr_int[1] = INSTR_RET1;
+    __sync_synchronize();
 }
 
-void detect(int sfd, struct signalfd_siginfo* sfdsi_ptr) {
-    // do checks here
-    printf("check_sigill result: [%d]\n", check_sigill(sfd, sfdsi_ptr, 1));
-    raise(SIGILL);
-    printf("check_sigill result: [%d]\n", check_sigill(sfd, sfdsi_ptr, 1));
+void detect(int (*mem_ptr_fun)()) {
+    global_mem_ptr_int[0] = INSTR_NOP;
+    printf("sigill: [%d]\n", mem_ptr_fun());
+    global_mem_ptr_int[0] = 0xffffffff;
+    printf("sigill: [%d]\n", mem_ptr_fun());
 }
 
 int main() {
-    // init
-    sigset_t mask;
-    sigset_t oldmask;
-    sigemptyset(&mask);
-    sigemptyset(&oldmask);
-    sigaddset(&mask, SIGILL);
-    int err_block = pthread_sigmask(SIG_BLOCK, &mask, &oldmask);
-    if (err_block) {
-        puts("pthread_sigmask block error");
-        return err_block;
+    // aligned memory
+    void* mem_ptr = NULL;
+    int err_pm = posix_memalign(&mem_ptr, 4096, ALIGNED_MEMSIZE);
+    if (err_pm) {
+        puts("posix_memalign error");
+        return err_pm;
     }
-    int sfd = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
-    if (-1 == sfd) {
-        puts("signalfd error");
+    int err_mp = mprotect(mem_ptr, ALIGNED_MEMSIZE, PROT_READ | PROT_WRITE | PROT_EXEC);
+    if (err_mp) {
+        puts("mprotect error");
         return errno;
     }
-    struct signalfd_siginfo sfdsi;
-    memset(&sfdsi, 0, sizeof(struct signalfd_siginfo));
+    int* mem_ptr_int = (int*) mem_ptr;
+    mem_ptr_int[0] = INSTR_PUSH;
+    mem_ptr_int[1] = INSTR_NOP;
+    mem_ptr_int[2] = INSTR_RET0;
+    mem_ptr_int[3] = INSTR_POP;
+    mem_ptr_int[4] = INSTR_BXLR;
+    int (*mem_ptr_fun)();
+    mem_ptr_fun = (int (*)()) mem_ptr;
 
-    detect(sfd, &sfdsi);
+    // signal handler
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(struct sigaction));
+    sigemptyset(&sa.sa_mask);
+    sa.sa_handler = &handle_signal;
+    int err_sa = sigaction(SIGILL, &sa, NULL);
+    if (-1 == err_sa) {
+        perror("sigaction error");
+        return errno;
+    }
+
+    // run detection
+    global_mem_ptr_int = mem_ptr_int + 1;
+    __sync_synchronize();
+    detect(mem_ptr_fun);
 
     // cleanup
-    int err_close = close(sfd);
-    if (err_close) {
-        puts("sfd close error");
-        return errno;
+    sa.sa_handler = SIG_DFL;
+    int err_sacl = sigaction(SIGILL, &sa, NULL);
+    if (-1 == err_sacl) {
+        perror("sigaction cleanup error");
     }
-    int err_unblock = pthread_sigmask(SIG_UNBLOCK, &mask, NULL);
-    if (err_unblock) {
-        puts("pthread_sigmask unblock error");
-        return errno;
-    }
-    int err_reblock = pthread_sigmask(SIG_BLOCK, &oldmask, NULL);
-    if (err_unblock) {
-        puts("pthread_sigmask reblock error");
-        return errno;
-    }
+    free(mem_ptr);
 
     return 0;
 }
