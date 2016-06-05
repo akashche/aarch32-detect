@@ -13,7 +13,8 @@
  *  -2: different signal
  *  -3: more than one signal
  */
-int check_sigill(int sfd, struct signalfd_siginfo* sfdsi_ptr) {
+int check_sigill(int sfd, struct signalfd_siginfo* sfdsi_ptr,
+        int check_next) {
     size_t len = sizeof(struct signalfd_siginfo);
     ssize_t retlen = read(sfd, sfdsi_ptr, len);
     if (-1 == retlen && EAGAIN == errno) {
@@ -21,17 +22,21 @@ int check_sigill(int sfd, struct signalfd_siginfo* sfdsi_ptr) {
         return 0;
     } else if (len == retlen) {
         if (SIGILL == sfdsi_ptr->ssi_signo) {
-            // check for next signal
-            int next_signal = check_sigill(sfd, sfdsi_ptr);
-            if (0 == next_signal) {
-                // sigill
-                return 1;
-            } else if (-1 == next_signal) {
-                // read error
-                return -1;
+            if (check_next > 0) {
+                // check for next signal
+                int next_signal = check_sigill(sfd, sfdsi_ptr, --check_next);
+                if (0 == next_signal) {
+                    // sigill
+                    return 1;
+                } else if (-1 == next_signal) {
+                    // read error
+                    return -1;
+                } else {
+                    // more than one signal
+                    return -3;
+                }
             } else {
-                // more than one signal
-                return -3;
+                return 1;
             }
         } else {
             // diferent signal
@@ -45,9 +50,9 @@ int check_sigill(int sfd, struct signalfd_siginfo* sfdsi_ptr) {
 
 void detect(int sfd, struct signalfd_siginfo* sfdsi_ptr) {
     // do checks here
-    printf("check_sigill result: [%d]\n", check_sigill(sfd, sfdsi_ptr));
+    printf("check_sigill result: [%d]\n", check_sigill(sfd, sfdsi_ptr, 1));
     raise(SIGILL);
-    printf("check_sigill result: [%d]\n", check_sigill(sfd, sfdsi_ptr));
+    printf("check_sigill result: [%d]\n", check_sigill(sfd, sfdsi_ptr, 1));
 }
 
 int main() {
