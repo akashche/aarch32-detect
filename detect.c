@@ -24,14 +24,15 @@ int* global_mem_ptr_int;
 
 int create_test_instrs(int** instrs_out, char*** instr_names_out) {
     // update len accordingly on test list change
-    int len = 2;
+    int len = 3;
     int* instrs = malloc(len * sizeof(int));
     char** instr_names = malloc(len * sizeof(char*));
     int i = 0;
 
     // test list
-    instrs[i] = 0xe1a00000; instr_names[i++] = "NOP";
-    instrs[i] = 0xffffffff; instr_names[i++] = "INVALID";
+    instrs[i] = 0xe1a00000; instr_names[i++] = "mov, r0, r0";
+    instrs[i] = 0xffffffff; instr_names[i++] = "invalid";
+    instrs[i] = 0xe19d0f9f; instr_names[i++] = "ldrex r0, [sp]";
     
     // check and return
     if (i != len) {
@@ -53,7 +54,9 @@ void handle_signal(int signal) {
 void detect(int len, int* instrs, char** instr_names, int (*mem_ptr_fun)()) {
     for (int i = 0; i < len; i++) {
         global_mem_ptr_int[0] = instrs[i];
-        printf("%d: %s\n", mem_ptr_fun(), instr_names[i]);
+        global_mem_ptr_int[1] = INSTR_RET0;
+        __sync_synchronize();
+        printf("%d %x %s\n", mem_ptr_fun(), instrs[i], instr_names[i]);
     }
 }
 
