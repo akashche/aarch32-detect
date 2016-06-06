@@ -17,7 +17,7 @@ static void ill_handler(int sig) {
 }
 
 static int safe_probe(int (*fun)(void*)) {
-	if (0 == sigsetjmp(global_ill_jmp, 1)) { 
+    if (0 == sigsetjmp(global_ill_jmp, 1)) { 
         volatile int tmp = 1;
         fun((void*) &tmp);
         return 1;
@@ -41,16 +41,16 @@ static int detect() {
 
 int main() {
     // signal handler
-	struct sigaction ill_oact, ill_act;
+    struct sigaction ill_oact, ill_act;
     sigset_t all_masked, oset;
-	sigfillset(&all_masked);
+    sigfillset(&all_masked);
     sigdelset(&all_masked, SIGILL);
     sigdelset(&all_masked, SIGTRAP);
     sigdelset(&all_masked, SIGFPE);
     sigdelset(&all_masked, SIGBUS);
     sigdelset(&all_masked, SIGSEGV);
 
-	memset(&ill_act, 0, sizeof(ill_act));
+    memset(&ill_act, 0, sizeof(ill_act));
     ill_act.sa_handler = ill_handler;
     ill_act.sa_mask = all_masked;
 
@@ -61,7 +61,7 @@ int main() {
     int res = detect();
 
     // cleanup
-	sigaction(SIGILL, &ill_oact, NULL);
+    sigaction(SIGILL, &ill_oact, NULL);
     sigprocmask(SIG_SETMASK, &oset, NULL);
 
     return res;
