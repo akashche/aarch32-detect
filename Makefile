@@ -6,7 +6,7 @@ clean:
 	rm -f detect
 
 compile:
-	gcc -g -O0 detect.c -o detect -lpthread
+	gcc -g -O0 detect.c -o detect
 
 run:
 	./detect ; echo $$?
