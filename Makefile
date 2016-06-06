@@ -1,16 +1,12 @@
 
-all: clean compile run
+all: clean compile
 
 clean:
-	rm -f detect.o
 	rm -f detect
-	rm -f sigtest.o
-	rm -f sigtest
 
 compile:
-	#gcc -g -O0 detect.c -o detect
-	gcc -g -O0 sigtest_asm.s sigtest.c -o sigtest
+	gcc probes.s detect.c -o detect
 
 run:
-	./sigtest ; echo $$?
+	./detect ; echo $$?
 
