@@ -29,3 +29,13 @@ probe_ldrex:
     mov r0, r1
     pop {r4, r5, r6, r7, r8, r9, r10, r11, lr}
     bx lr
+
+.global probe_movt
+.type probe_movt, %function
+probe_movt:
+    push {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+    /* movt r1, #1 */
+    .word 0xe3401001
+    mov r0, r1
+    pop {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+    bx lr

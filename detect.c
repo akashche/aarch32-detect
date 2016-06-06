@@ -10,6 +10,7 @@ static sigjmp_buf global_ill_jmp;
 int probe_mov(void*);
 int probe_udf(void*);
 int probe_ldrex(void*);
+int probe_movt(void*);
 
 static void ill_handler(int sig) {
     siglongjmp(global_ill_jmp, sig);
@@ -28,10 +29,12 @@ static int detect() {
     int res_mov = safe_probe(probe_mov);
     int res_udf = safe_probe(probe_udf);
     int res_ldrex = safe_probe(probe_ldrex);
+    int res_movt = safe_probe(probe_movt);
 
     printf("%d: mov probe\n", res_mov);
     printf("%d: udf probe\n", res_udf);
     printf("%d: ldrex probe\n", res_ldrex);
+    printf("%d: movt probe\n", res_movt);
 
     return 0;
 }
